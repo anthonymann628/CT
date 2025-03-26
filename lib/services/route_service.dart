@@ -2,7 +2,7 @@
 
 import 'package:flutter/foundation.dart';
 
-import '../config.dart';
+import '../config.dart'; // <-- import this so 'Config' is recognized
 import '../models/route.dart';
 import '../models/stop.dart';
 import 'database_service.dart';
@@ -18,16 +18,11 @@ class RouteService extends ChangeNotifier {
 
   Future<void> fetchRoutes() async {
     if (Config.isTesting) {
-      // Load from local DB after import
       await DatabaseService.importDemoData();
-      _routes = []; // We'll ignore the 'demo_data.txt' specifics or table names
-      // If you do want to parse them from a table, do so:
-      // final routeStops = await DatabaseService.getStops();
-      // Or if you have a separate 'getRoutes()' method in DB:
-      // _routes = await DatabaseService.getRoutes();
+      _routes = await DatabaseService.getRoutes();
       notifyListeners();
     } else {
-      // Non-testing: replace with real network call or do nothing
+      // production
       _routes = [];
       notifyListeners();
     }
@@ -41,13 +36,19 @@ class RouteService extends ChangeNotifier {
 
   Future<void> fetchStops(String routeId) async {
     if (Config.isTesting) {
-      // Load from local DB
       _stops = await DatabaseService.getStops(routeId);
       notifyListeners();
     } else {
-      // Non-testing
+      // production
       _stops = [];
       notifyListeners();
     }
+  }
+
+  void reorderStops(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex--;
+    final item = _stops.removeAt(oldIndex);
+    _stops.insert(newIndex, item);
+    notifyListeners();
   }
 }

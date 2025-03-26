@@ -1,14 +1,14 @@
 // lib/services/delivery_service.dart
-
 import 'package:flutter/foundation.dart';
-import 'dart:async';
+
 import '../models/stop.dart';
-import 'api_client.dart';
+import 'api_client.dart'; // if you have an ApiClient, or remove if not
+import 'database_service.dart';
 
 class DeliveryService extends ChangeNotifier {
   Future<void> attachBarcode(Stop stop, String code) async {
+    // add code to stop barcodes
     stop.barcodes.add(code);
-    // If you store in DB, do it here
     notifyListeners();
   }
 
@@ -23,10 +23,9 @@ class DeliveryService extends ChangeNotifier {
   }
 
   Future<void> completeStop(Stop stop) async {
+    // Mark stop completed
     stop.completed = true;
     stop.completedAt = DateTime.now();
-
-    // Attempt immediate upload
     try {
       await _uploadStop(stop);
       stop.uploaded = true;
@@ -39,11 +38,11 @@ class DeliveryService extends ChangeNotifier {
   }
 
   Future<void> _uploadStop(Stop stop) async {
-    // Previously: final payload = stop.toJson();
-    // Now we do:
-    final payload = stop.toMap();
-
-    // Possibly embed base64 images if your server needs them
-    await ApiClient.post('/stops/${stop.id}/complete', payload);
+    // If you have an actual API for uploading stops
+    final payload = stop.toMap(); // using toMap
+    // Possibly do an ApiClient post
+    // Example: await ApiClient.post('/stops/${stop.id}/complete', payload);
+    // or store it locally
+    await DatabaseService.updateStopDelivered(stop);
   }
 }

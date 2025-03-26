@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/app_state.dart';
 import 'login_screen.dart';
 import 'route_select_screen.dart';
@@ -16,7 +17,6 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-
   @override
   void initState() {
     super.initState();
@@ -26,6 +26,7 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _initFlow() async {
     await Future.delayed(const Duration(seconds: 1));
     final appState = context.read<AppState>();
+
     if (appState.isLoggedIn) {
       Navigator.pushReplacementNamed(context, RouteSelectScreen.routeName);
     } else {

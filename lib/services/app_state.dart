@@ -1,7 +1,6 @@
 // lib/services/app_state.dart
 
 import 'package:flutter/foundation.dart';
-
 import '../models/user.dart';
 import '../models/stop.dart';
 import '../models/barcode_scan.dart';
@@ -39,9 +38,8 @@ class AppState extends ChangeNotifier {
   /// Add a barcode scan to the specified stop. The code is appended to the stop's barcodes list.
   void addBarcodeScan(String stopId, BarcodeScan scan) {
     try {
-      final stop = stops.firstWhere((s) => s.id == stopId);
-      // If your Stop model has a `barcodes: List<String>` field,
-      // we attach scan.code to it.
+      final int idInt = int.tryParse(stopId) ?? -1;
+      final stop = stops.firstWhere((s) => s.id == idInt);
       stop.barcodes.add(scan.code);
       notifyListeners();
     } catch (_) {
@@ -53,32 +51,39 @@ class AppState extends ChangeNotifier {
   /// If you store multiple photos, you'd add it to a list instead.
   void addPhoto(String stopId, Photo photo) {
     try {
-      final stop = stops.firstWhere((s) => s.id == stopId);
+      final int idInt = int.tryParse(stopId) ?? -1;
+      final stop = stops.firstWhere((s) => s.id == idInt);
       stop.photoPath = photo.filePath;
       notifyListeners();
-    } catch (_) {}
+    } catch (_) {
+      // Stop not found or other error
+    }
   }
 
   /// Attach a signature by setting the stop's `signaturePath`.
   void setSignature(String stopId, Signature signature) {
     try {
-      final stop = stops.firstWhere((s) => s.id == stopId);
+      final int idInt = int.tryParse(stopId) ?? -1;
+      final stop = stops.firstWhere((s) => s.id == idInt);
       stop.signaturePath = signature.filePath;
       notifyListeners();
-    } catch (_) {}
+    } catch (_) {
+      // Stop not found or other error
+    }
   }
 
-  /// Mark a stop as delivered/completed, optionally updating
-  /// the time and GPS coords if provided.
+  /// Mark a stop as delivered/completed, optionally updating the time and GPS coords if provided.
   void markStopDelivered(String stopId, {DateTime? deliveredAt, double? lat, double? lng}) {
     try {
-      final stop = stops.firstWhere((s) => s.id == stopId);
-      // If your Stop model uses 'delivered' instead of 'completed', adapt accordingly
+      final int idInt = int.tryParse(stopId) ?? -1;
+      final stop = stops.firstWhere((s) => s.id == idInt);
       stop.completed = true;
-      stop.completedAt = deliveredAt;  // Correctly assign to 'completedAt'
+      stop.completedAt = deliveredAt;  // assign delivered time if provided
       stop.latitude = lat;
       stop.longitude = lng;
       notifyListeners();
-    } catch (_) {}
+    } catch (_) {
+      // Stop not found or other error
+    }
   }
 }
