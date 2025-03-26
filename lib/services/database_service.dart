@@ -1,165 +1,171 @@
 // lib/services/database_service.dart
+
 import 'dart:async';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
+
 import '../models/stop.dart';
-import '../models/barcode_scan.dart';
-import '../models/photo.dart';
-import '../models/signature.dart';
-import '../utils/constants.dart';
 
 class DatabaseService {
   static Database? _db;
-  
-  static Future<void> executeRawSql(String sql) async {
-  final db = await _getDatabase();
-  await db.execute(sql);
-  }
 
-  static Future<Database> _getDatabase() async {
+  static Future<Database> _openDatabase() async {
     if (_db != null) return _db!;
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, Constants.dbName);
-    _db = await openDatabase(path, version: Constants.dbVersion, onCreate: (db, version) async {
-      // Create tables
+    final databasesPath = await getDatabasesPath();
+    final dbPath = p.join(databasesPath, 'ctfo_demo.db');
+    _db = await openDatabase(dbPath, version: 1, onCreate: (db, version) async {
+      // Basic onCreate if needed
       await db.execute('''
-        CREATE TABLE stops (
+        CREATE TABLE IF NOT EXISTS Stops (
           id INTEGER PRIMARY KEY,
-          routeId INTEGER,
+          routeId TEXT,
           sequence INTEGER,
           name TEXT,
           address TEXT,
-          delivered INTEGER,
-          synced INTEGER,
-          deliveredAt TEXT,
+          completed INTEGER,
+          uploaded INTEGER,
+          completedAt TEXT,
           latitude REAL,
           longitude REAL
         )
       ''');
-      await db.execute('''
-        CREATE TABLE barcode_scans (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          routeId INTEGER,
-          stopId INTEGER,
-          code TEXT,
-          type TEXT,
-          timestamp TEXT
-        )
-      ''');
-      await db.execute('''
-        CREATE TABLE photos (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          routeId INTEGER,
-          stopId INTEGER,
-          filePath TEXT,
-          timestamp TEXT
-        )
-      ''');
-      await db.execute('''
-        CREATE TABLE signatures (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          routeId INTEGER,
-          stopId INTEGER,
-          filePath TEXT,
-          signerName TEXT,
-          timestamp TEXT
-        )
-      ''');
+
+      // Similarly define tables for Photos, Signatures, BarcodeScan, etc. if needed
     });
     return _db!;
   }
 
+  /// For the fallback demo data. We'll just run all the commands in the file.
+  static Future<void> importDemoData() async {
+    final db = await _openDatabase();
+    final sqlScript = await rootBundle.loadString('assets/demoRoutes/demo_data.txt');
+    final statements = sqlScript.split(';');
+    for (var rawStmt in statements) {
+      final stmt = rawStmt.trim();
+      if (stmt.isNotEmpty) {
+        try {
+          await db.execute(stmt);
+        } catch (e) {
+          print('Error executing SQL: $e\nStatement: $stmt');
+        }
+      }
+    }
+  }
+
   static Future<void> clearAllData() async {
-    final db = await _getDatabase();
-    await db.delete('barcode_scans');
-    await db.delete('photos');
-    await db.delete('signatures');
-    await db.delete('stops');
+    final db = await _openDatabase();
+    await db.delete('Stops'); // Clear the 'Stops' table
+    // If your demo_data uses different table names, also clear them if you want
   }
 
-  static Future<void> insertStops(List<Stop> stops) async {
-    final db = await _getDatabase();
-    Batch batch = db.batch();
-    for (Stop stop in stops) {
-      batch.insert('stops', stop.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  /// Insert a list of stops into DB
+  static Future<void> insertStops(String routeId, List<Stop> stops) async {
+    final db = await _openDatabase();
+    for (var s in stops) {
+      // If you need routeId explicitly, set it
+      s.routeIdString = routeId;
+      await db.insert('Stops', s.toJson(), conflictAlgorithm: ConflictAlgorithm.replace);
     }
-    await batch.commit(noResult: true);
   }
 
-  static Future<List<Stop>> getStops() async {
-    final db = await _getDatabase();
-    final stopMaps = await db.query('stops');
-    List<Stop> stops = stopMaps.map((m) => Stop.fromMap(m)).toList();
-    if (stops.isEmpty) return [];
-
-    // Fetch related data and attach to stops
-    final scanMaps = await db.query('barcode_scans');
-    final photoMaps = await db.query('photos');
-    final signatureMaps = await db.query('signatures');
-
-    // Index stops by id for quick lookup
-    final stopById = { for (var s in stops) s.id: s };
-
-    // Attach barcode scans
-    for (var m in scanMaps) {
-      BarcodeScan scan = BarcodeScan.fromMap(m);
-      String? sid = m['stopId']?.toString();
-      if (sid != null && stopById.containsKey(sid)) {
-        // Add the code to the stop's barcode list
-        stopById[sid]!.barcodes.add(scan.code);
-      }
-    }
-    // Attach photos
-    for (var m in photoMaps) {
-      Photo photo = Photo.fromMap(m);
-      String? sid = m['stopId']?.toString();
-      if (sid != null && stopById.containsKey(sid)) {
-        // If multiple photos, we take the latest one for photoPath (or extend model to list if needed)
-        stopById[sid]!.photoPath = photo.filePath;
-        // (If needed, you could maintain a list of photos; but our Stop uses single photoPath for simplicity)
-      }
-    }
-    // Attach signatures
-    for (var m in signatureMaps) {
-      Signature sig = Signature.fromMap(m);
-      String? sid = m['stopId']?.toString();
-      if (sid != null && stopById.containsKey(sid)) {
-        stopById[sid]!.signaturePath = sig.filePath;
-        // (We don't store signerName in Stop, but could if needed)
-      }
-    }
-
-    return stops;
+  /// Insert a single barcode scan record (dummy example)
+  static Future<void> insertBarcodeScan({
+    required int stopId,
+    required String code,
+    required String type,
+  }) async {
+    final db = await _openDatabase();
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS BarcodeScans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        stopId INTEGER,
+        code TEXT,
+        type TEXT,
+        timestamp TEXT
+      )
+    ''');
+    // Insert record
+    await db.insert('BarcodeScans', {
+      'stopId': stopId,
+      'code': code,
+      'type': type,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
   }
 
-  static Future<void> insertBarcodeScan(BarcodeScan scan) async {
-    final db = await _getDatabase();
-    await db.insert('barcode_scans', scan.toMap());
+  /// Insert a single photo record
+  static Future<void> insertPhoto({
+    required int stopId,
+    required String filePath,
+  }) async {
+    final db = await _openDatabase();
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS Photos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        stopId INTEGER,
+        filePath TEXT,
+        timestamp TEXT
+      )
+    ''');
+    await db.insert('Photos', {
+      'stopId': stopId,
+      'filePath': filePath,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
   }
 
-  static Future<void> insertPhoto(Photo photo) async {
-    final db = await _getDatabase();
-    await db.insert('photos', photo.toMap());
+  /// Insert a single signature record
+  static Future<void> insertSignature({
+    required int stopId,
+    required String filePath,
+    required String signerName,
+  }) async {
+    final db = await _openDatabase();
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS Signatures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        stopId INTEGER,
+        filePath TEXT,
+        signerName TEXT,
+        timestamp TEXT
+      )
+    ''');
+    await db.insert('Signatures', {
+      'stopId': stopId,
+      'filePath': filePath,
+      'signerName': signerName,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
   }
 
-  static Future<void> insertSignature(Signature signature) async {
-    final db = await _getDatabase();
-    await db.insert('signatures', signature.toMap());
-  }
-
+  /// Mark a stop as delivered
   static Future<void> updateStopDelivered(Stop stop) async {
-    final db = await _getDatabase();
+    final db = await _openDatabase();
+    // Convert booleans to int
+    final updated = {
+      'completed': stop.completed ? 1 : 0,
+      'uploaded': stop.uploaded ? 1 : 0,
+      'completedAt': stop.completedAt?.toIso8601String(),
+    };
     await db.update(
-      'stops',
-      {
-        'delivered': stop.completed ? 1 : 0,
-        'deliveredAt': stop.completedAt?.toIso8601String(),
-        'latitude': stop.latitude,
-        'longitude': stop.longitude,
-        'synced': stop.uploaded ? 1 : 0,
-      },
+      'Stops',
+      updated,
       where: 'id = ?',
-      whereArgs: [int.tryParse(stop.id) ?? stop.id],
+      whereArgs: [stop.id],
     );
+  }
+
+  /// Get stops, optionally filtered by routeId
+  static Future<List<Stop>> getStops([String? routeId]) async {
+    final db = await _openDatabase();
+    String? whereClause;
+    List<Object?>? whereArgs;
+    if (routeId != null) {
+      whereClause = 'routeId = ?';
+      whereArgs = [routeId];
+    }
+    final maps = await db.query('Stops', where: whereClause, whereArgs: whereArgs);
+    return maps.map((m) => Stop.fromJson(m)).toList();
   }
 }

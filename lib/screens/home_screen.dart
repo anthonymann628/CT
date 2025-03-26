@@ -3,18 +3,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-// Models
-import '../models/stop.dart'; // So we can use 'Stop'
-
-// Services
-import '../services/database_service.dart';
+import '../models/app_state.dart';
 import '../services/sync_service.dart';
-import '../services/app_state.dart'; // Must import THIS file, not ../models/app_state.dart
-
-// Widgets
-import '../widgets/loading_indicator.dart';
+import '../widgets/loading_indicator.dart'; // If you have a custom loading widget
+// Otherwise, just remove references and use CircularProgressIndicator
 
 class HomeScreen extends StatefulWidget {
+  static const routeName = '/home';
+
   const HomeScreen({Key? key}) : super(key: key);
 
   @override
@@ -26,39 +22,64 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
 
   @override
-  void initState() {
-    super.initState();
-    // Load any existing route from local database
-    DatabaseService.getStops().then((localStops) {
-      if (!mounted) return;
-      if (localStops.isNotEmpty) {
-        // Use the correct method from AppState
-        Provider.of<AppState>(context, listen: false).setStops(localStops);
-      }
-    });
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Home'),
+        centerTitle: true,
+      ),
+      body: _loading
+          ? const LoadingIndicator(message: 'Please wait...')
+          : Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                    ),
+                  ElevatedButton(
+                    onPressed: _downloadRoute,
+                    child: const Text('Download Route'),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: _syncData,
+                    child: const Text('Sync Pending Data'),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (appState.isLoggedIn) {
+                        Navigator.pushNamed(context, '/routeSelect');
+                      } else {
+                        Navigator.pushNamed(context, '/login');
+                      }
+                    },
+                    child: const Text('Go to Next'),
+                  ),
+                ],
+              ),
+            ),
+    );
   }
 
-  Future<void> _loadRoute() async {
+  Future<void> _downloadRoute() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      // Fetch route from backend
-      final List<Stop>? fetchedStops = await SyncService.fetchRoute();
-      if (fetchedStops != null && fetchedStops.isNotEmpty) {
-        // Update app state and navigate to route details
-        Provider.of<AppState>(context, listen: false).setStops(fetchedStops);
-        Navigator.of(context).pushNamed('/routeDetails');
-      } else {
-        setState(() {
-          _error = 'No route data available.';
-        });
-      }
+      // You can call a method from SyncService or RouteService if relevant
+      // e.g. await RouteService.instance.fetchRoutes();
+      // For now, just simulate
+      await Future.delayed(const Duration(seconds: 1));
+      // If success, no error
     } catch (e) {
-      setState(() {
-        _error = 'Failed to load route. Please check your connection.';
-      });
+      setState(() => _error = 'Failed to download route. $e');
     } finally {
       setState(() => _loading = false);
     }
@@ -71,87 +92,13 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     try {
       final success = await SyncService.syncPendingData();
-      if (success) {
-        // If route is completed, clear local data for new route
-        final appState = Provider.of<AppState>(context, listen: false);
-        // If all stops are completed, we empty them out
-        if (appState.stops.isNotEmpty && appState.stops.every((s) => s.completed)) {
-          appState.setStops([]);
-        }
+      if (!success) {
+        setState(() => _error = 'Data sync failed.');
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? 'Data synchronized successfully.' : 'Data sync failed.'),
-        ),
-      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Data sync failed.')),
-      );
+      setState(() => _error = 'Data sync error: $e');
     } finally {
       setState(() => _loading = false);
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final appState = context.watch<AppState>();
-
-    Widget content;
-    if (_loading) {
-      content = const LoadingIndicator();
-    } else if (appState.stops.isEmpty) {
-      // No route loaded yet
-      content = Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Text(_error!, style: const TextStyle(color: Colors.red)),
-            ),
-          ElevatedButton(
-            onPressed: _loadRoute,
-            child: const Text('Download Route'),
-          ),
-        ],
-      );
-    } else {
-      // Route is loaded
-      final totalStops = appState.stops.length;
-      final completedStops = appState.stops.where((s) => s.completed).length;
-
-      content = Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('Route Loaded: $totalStops stops', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8.0),
-            Text('Completed: $completedStops / $totalStops'),
-            const SizedBox(height: 20.0),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pushNamed('/routeDetails');
-              },
-              child: const Text('View Route Details'),
-            ),
-            const SizedBox(height: 12.0),
-            ElevatedButton(
-              onPressed: completedStops > 0 ? _syncData : null,
-              child: const Text('Sync Data'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        centerTitle: true,
-      ),
-      body: Center(child: content),
-    );
   }
 }

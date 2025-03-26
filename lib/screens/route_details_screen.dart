@@ -1,27 +1,13 @@
 // lib/screens/route_details_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-
-// Models
 import '../models/stop.dart';
-import '../models/barcode_scan.dart';
-import '../models/photo.dart';
-import '../models/signature.dart';
-
-// Services
-import '../services/photo_service.dart';
-import '../services/scan_service.dart';
-import '../services/signature_service.dart';
 import '../services/database_service.dart';
-import '../services/location_service.dart';
 import '../services/sync_service.dart';
-import '../services/app_state.dart';
-
-// Widgets
-import '../widgets/stop_list_item.dart';
 
 class RouteDetailsScreen extends StatefulWidget {
+  static const routeName = '/routeDetails';
+
   const RouteDetailsScreen({Key? key}) : super(key: key);
 
   @override
@@ -30,131 +16,75 @@ class RouteDetailsScreen extends StatefulWidget {
 
 class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
   bool _processing = false;
-
-  Future<void> _completeStop(Stop stop) async {
-    // If it's already completed or we are processing, skip
-    if (_processing || stop.completed) return;
-    setState(() => _processing = true);
-
-    try {
-      // 1. Scan a barcode
-      final BarcodeScan? scanResult = await ScanService.scanBarcode();
-      if (scanResult == null) {
-        setState(() => _processing = false);
-        return;
-      }
-
-      // 2. Take a photo
-      final Photo? photo = await PhotoService.takePhoto();
-      if (photo == null) {
-        setState(() => _processing = false);
-        return;
-      }
-
-      // 3. Capture a signature
-      final Signature? signature = await SignatureService.captureSignature(context);
-      if (signature == null) {
-        setState(() => _processing = false);
-        return;
-      }
-
-      // Convert stop.id / routeId (String) to int if your BarcodeScan/Photo/Signature 
-      // classes store them as int. If those classes also store them as String, skip parse.
-      final int? stopIdAsInt = int.tryParse(stop.id);
-      final int? routeIdAsInt = int.tryParse(stop.routeId);
-
-      // Assign them to the captured items
-      // If your BarcodeScan uses 'int? stopId;' do:
-      scanResult.stopId = stopIdAsInt;
-      scanResult.routeId = routeIdAsInt;
-
-      // If Photo has 'int? stopId;' do:
-      photo.stopId = stopIdAsInt;
-      photo.routeId = routeIdAsInt;
-
-      // If Signature has 'int? stopId;' do:
-      signature.stopId = stopIdAsInt;
-      signature.routeId = routeIdAsInt;
-
-      // If your model fields are strings, just do:
-      // scanResult.stopId = stop.id;
-
-      // Save data to local DB
-      await DatabaseService.insertBarcodeScan(scanResult);
-      await DatabaseService.insertPhoto(photo);
-      await DatabaseService.insertSignature(signature);
-
-      // Mark the stop as completed
-      final now = DateTime.now();
-      double? lat;
-      double? lng;
-
-      try {
-        final pos = await LocationService.getCurrentLocation();
-        if (pos != null) {
-          lat = pos.latitude;
-          lng = pos.longitude;
-        }
-      } catch (_) {}
-
-      stop.completed = true;
-      stop.completedAt = now;
-      stop.latitude = lat;
-      stop.longitude = lng;
-
-      await DatabaseService.updateStopDelivered(stop);
-
-      // Update in-memory state
-      final appState = context.read<AppState>();
-      // Because addBarcodeScan needs a string? If so:
-      appState.addBarcodeScan(stop.id, scanResult);
-      appState.addPhoto(stop.id, photo);
-      appState.setSignature(stop.id, signature);
-      appState.markStopDelivered(stop.id, deliveredAt: now, lat: lat, lng: lng);
-
-      // Attempt immediate sync
-      try {
-        await SyncService.syncStopData(stop);
-      } catch (_) {
-        // If sync fails, it remains unsynced for a later retry
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Stop "${stop.name}" completed.')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to complete stop.')),
-      );
-    } finally {
-      setState(() => _processing = false);
-    }
-  }
+  String? _error;
 
   @override
   Widget build(BuildContext context) {
-    // We'll read the list of stops from AppState
-    final stops = context.select<AppState, List<Stop>>((s) => s.stops);
+    // We assume you have stops passed in, or you could fetch them from a provider
+    final List<Stop> stops = ModalRoute.of(context)!.settings.arguments as List<Stop>? ?? [];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Route Details'),
       ),
-      body: ListView.builder(
-        itemCount: stops.length,
-        itemBuilder: (context, index) {
-          final stop = stops[index];
-          return StopListItem(
-            stop: stop,
-            onTap: () => _completeStop(stop),
-            onNavigate: () {
-              if (stop.address.isNotEmpty) {
-                LocationService.openMap(stop.address);
-              }
-            },
-          );
-        },
-      ),
+      body: _processing
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              itemCount: stops.length,
+              itemBuilder: (context, index) {
+                final stop = stops[index];
+                return ListTile(
+                  title: Text(stop.name),
+                  subtitle: Text(stop.address),
+                  onTap: () => _completeStop(stop),
+                );
+              },
+            ),
     );
+  }
+
+  Future<void> _completeStop(Stop stop) async {
+    if (_processing) return;
+    setState(() => _processing = true);
+
+    try {
+      // insert a dummy barcode scan
+      await DatabaseService.insertBarcodeScan(
+        stopId: stop.id,
+        code: 'TEST123',
+        type: 'QR',
+      );
+      // insert a dummy photo
+      await DatabaseService.insertPhoto(
+        stopId: stop.id,
+        filePath: '/path/to/photo.jpg',
+      );
+      // insert a dummy signature
+      await DatabaseService.insertSignature(
+        stopId: stop.id,
+        filePath: '/path/to/signature.png',
+        signerName: 'John Doe',
+      );
+
+      // Mark stop as completed
+      stop.completed = true;
+      stop.completedAt = DateTime.now();
+      // Update local DB
+      await DatabaseService.updateStopDelivered(stop);
+
+      // Attempt immediate sync
+      await SyncService.syncStopData(stop);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Stop #${stop.id} completed.')),
+      );
+    } catch (e) {
+      setState(() => _error = 'Failed to complete stop: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_error!)),
+      );
+    } finally {
+      setState(() => _processing = false);
+    }
   }
 }

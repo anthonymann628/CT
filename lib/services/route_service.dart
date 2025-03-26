@@ -1,8 +1,11 @@
 // lib/services/route_service.dart
+
 import 'package:flutter/foundation.dart';
+
+import '../config.dart';
 import '../models/route.dart';
 import '../models/stop.dart';
-import 'api_client.dart';
+import 'database_service.dart';
 
 class RouteService extends ChangeNotifier {
   List<RouteModel> _routes = [];
@@ -14,10 +17,20 @@ class RouteService extends ChangeNotifier {
   List<Stop> get stops => _stops;
 
   Future<void> fetchRoutes() async {
-    final data = await ApiClient.get('/routes');
-    final list = data as List;
-    _routes = list.map((json) => RouteModel.fromJson(json)).toList();
-    notifyListeners();
+    if (Config.isTesting) {
+      // Load from local DB after import
+      await DatabaseService.importDemoData();
+      _routes = []; // We'll ignore the 'demo_data.txt' specifics or table names
+      // If you do want to parse them from a table, do so:
+      // final routeStops = await DatabaseService.getStops();
+      // Or if you have a separate 'getRoutes()' method in DB:
+      // _routes = await DatabaseService.getRoutes();
+      notifyListeners();
+    } else {
+      // Non-testing: replace with real network call or do nothing
+      _routes = [];
+      notifyListeners();
+    }
   }
 
   Future<void> selectRoute(RouteModel route) async {
@@ -27,24 +40,14 @@ class RouteService extends ChangeNotifier {
   }
 
   Future<void> fetchStops(String routeId) async {
-    final data = await ApiClient.get('/routes/$routeId/stops');
-    final list = data as List;
-    _stops = list.map((json) => Stop.fromJson(json)).toList();
-    notifyListeners();
-  }
-
-  void reorderStops(int oldIndex, int newIndex) {
-    if (newIndex > _stops.length) newIndex = _stops.length;
-    if (oldIndex < newIndex) {
-      newIndex--;
+    if (Config.isTesting) {
+      // Load from local DB
+      _stops = await DatabaseService.getStops(routeId);
+      notifyListeners();
+    } else {
+      // Non-testing
+      _stops = [];
+      notifyListeners();
     }
-    final item = _stops.removeAt(oldIndex);
-    _stops.insert(newIndex, item);
-    // re-sequence them
-    for (var i = 0; i < _stops.length; i++) {
-      _stops[i].sequence = i;
-    }
-    notifyListeners();
-    // Possibly call an API to save the new order
   }
 }

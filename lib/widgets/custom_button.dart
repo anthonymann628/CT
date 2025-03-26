@@ -23,7 +23,7 @@ class CustomButton extends StatelessWidget {
           ? OutlinedButton(
               onPressed: onPressed,
               style: OutlinedButton.styleFrom(
-                primary: btnColor,
+                backgroundColor: btnColor,
                 side: BorderSide(color: btnColor),
               ),
               child: Text(label),
@@ -31,8 +31,8 @@ class CustomButton extends StatelessWidget {
           : ElevatedButton(
               onPressed: onPressed,
               style: ElevatedButton.styleFrom(
-                primary: btnColor,
-                onPrimary: Colors.white,
+                backgroundColor: btnColor,
+                foregroundColor: Colors.white,
               ),
               child: Text(label),
             ),

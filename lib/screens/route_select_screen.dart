@@ -1,4 +1,3 @@
-// lib/screens/route_select_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,11 +7,10 @@ import 'stops_list_screen.dart';
 
 class RouteSelectScreen extends StatefulWidget {
   static const routeName = '/routeSelect';
-
   const RouteSelectScreen({Key? key}) : super(key: key);
 
   @override
-  State<RouteSelectScreen> createState() => _RouteSelectScreenState();
+  _RouteSelectScreenState createState() => _RouteSelectScreenState();
 }
 
 class _RouteSelectScreenState extends State<RouteSelectScreen> {
@@ -22,6 +20,7 @@ class _RouteSelectScreenState extends State<RouteSelectScreen> {
   @override
   void initState() {
     super.initState();
+    // Automatically fetch routes when the screen is initialized
     _fetchRoutes();
   }
 
@@ -45,11 +44,15 @@ class _RouteSelectScreenState extends State<RouteSelectScreen> {
 
   Future<void> _selectRoute(RouteModel route) async {
     try {
+      // Select the route (this will also load stops for that route)
       await context.read<RouteService>().selectRoute(route);
       if (!mounted) return;
+      // Navigate to the stops list screen after selecting the route
       Navigator.pushReplacementNamed(context, StopsListScreen.routeName);
     } catch (e) {
-      setState(() => _errorMessage = 'Failed to select route: $e');
+      setState(() {
+        _errorMessage = 'Failed to select route: $e';
+      });
     }
   }
 
@@ -64,7 +67,7 @@ class _RouteSelectScreenState extends State<RouteSelectScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
+          : (_errorMessage != null)
               ? Center(child: Text(_errorMessage!))
               : ListView.builder(
                   itemCount: routes.length,

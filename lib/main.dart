@@ -1,3 +1,5 @@
+// lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,13 +17,19 @@ import 'screens/tools_screen.dart';
 import 'screens/camera_screen.dart';
 import 'screens/signature_screen.dart';
 import 'screens/barcode_scanner_screen.dart';
+
 // Services
 import 'services/app_state.dart';
 import 'services/route_service.dart';
 import 'services/delivery_service.dart';
 
+/*
+  This main.dart file is your real entry point.
+*/
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
   runApp(
     MultiProvider(
       providers: [
